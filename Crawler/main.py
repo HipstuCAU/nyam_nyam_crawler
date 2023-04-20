@@ -11,7 +11,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 start = time.time()
 
 def jsonParser(data):
-    with open(os.path.join(BASE_DIR, 'CAU_Cafeteria_Menu.json'), 'w+', encoding='utf-8') as f :
+    with open(os.path.join(BASE_DIR, 'CAUMealData.json'), 'w+', encoding='utf-8') as f :
         json.dump(data, f, ensure_ascii=False, indent='\t')
 
 
@@ -106,7 +106,7 @@ try :
     doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
 
     try:
-        with open(os.path.join(BASE_DIR, './CAU_Cafeteria_Menu.json'), 'r') as f:
+        with open(os.path.join(BASE_DIR, './CAUMealData.json'), 'r') as f:
             cafeteria_data_dic = json.load(f)
         doc_ref.set(cafeteria_data_dic)
     except Exception as e:
