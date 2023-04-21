@@ -36,7 +36,7 @@ jobs:
       
     - name: Run main.py # main.py 실행
       run: | 
-        python ./Cralwer/main.py
+        python Crawler/main.py
     - name: Commit
       run: |
         git config --local user.email "hth3396@gmail.com"
