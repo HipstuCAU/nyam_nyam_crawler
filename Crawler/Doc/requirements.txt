@@ -1,0 +1,8 @@
+selenium
+requests        
+google-cloud-core==2.3.2
+google-cloud-firestore==2.10.0
+google-cloud-storage==2.7.0
+json5==0.9.6
+jsonschema==4.16.0
+ujson==5.4.0
