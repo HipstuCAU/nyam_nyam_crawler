@@ -23,7 +23,7 @@ jobs:
     
     - name: Install python package # 파이썬 관련 패키지를 설치하고
       run: |        
-        pip install -r requirements.txt
+        pip install -r ./Crawler/Doc/requirements.txt
     
     - name: Install ubuntu package # 우분투 관련 패키지 설치 
       run: |        
