@@ -5,7 +5,7 @@ import math
 import json
 from google.cloud import firestore
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./crawler/hasikServiceAcountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Doc/hasikServiceAccountKey.json"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 시작 시간
 start = time.time()
@@ -17,7 +17,7 @@ def jsonParser(data):
 
 
 # 식당 메뉴 정보 가져오는 함수
-def getMenuInfo(mealSchedule) :
+def getMealInfo(mealSchedule) :
     menuInfoDict = {}
     for cafeteriaIndex in range(1, 10) :
         menuCount = 0
@@ -34,7 +34,8 @@ def getMenuInfo(mealSchedule) :
                     getcafeteriaInfo = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +')')
                     MenuType = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > ul > li:nth-child(2) > span').text
                     menuInfoDict[cafeteriaName][MenuType] = {}
-                    menuInfoDict[cafeteriaName][MenuType]['price'] = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > ul > li:nth-child(3) > span').text
+                    getMealPrice = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > ul > li:nth-child(3) > span')
+                    menuInfoDict[cafeteriaName][MenuType]['price'] = getMealPrice.text
                     getcafeteriaInfo.click()
                     time.sleep(0.5)
                     getMealTime = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > div > div.nb-p-04-02 > div.nb-p-04-02-01.nb-font-12 > p.nb-p-04-02-01-b')
@@ -52,18 +53,18 @@ def getMenuInfo(mealSchedule) :
     return menuInfoDict
 
 # 데일리 메뉴 정보 가져오는 함수
-def getDailyMenu() :
+def getDayOfMeal() :
     dailyMenuInfoDict = {}
     for mealSchedule in range(1, 4) :
         getMealSchedule = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-right.nb-t-right > ol > li:nth-child('+ str(mealSchedule) +')')
         dailyMenuInfoDict[mealSchedule-1] = {}
         getMealSchedule.click()
         time.sleep(0.5)
-        dailyMenuInfoDict[mealSchedule-1] = getMenuInfo(mealSchedule)
+        dailyMenuInfoDict[mealSchedule-1] = getMealInfo(mealSchedule)
     return dailyMenuInfoDict
 
 # 위클리 메뉴 정보 가져오는 함수
-def getWeekOfMealMenu() :
+def getWeekOfMeal() :
     weeklyMenuDict = {}
     weeklyIndex = 7
     for campus in range(1, 3):
@@ -73,7 +74,7 @@ def getWeekOfMealMenu() :
             getCampus.click()
             time.sleep(0.5)
             getDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > p')
-            weeklyMenuDict[campus-1][getDay.text] = getDailyMenu()
+            weeklyMenuDict[campus-1][getDay.text] = getDayOfMeal()
             time.sleep(0.3)
             setNextDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-next').click()
             setNextDay
@@ -83,7 +84,7 @@ def getWeekOfMealMenu() :
     return weeklyMenuDict
 
 def runCrawler():
-    jsonParser(getWeekOfMealMenu())
+    jsonParser(getWeekOfMeal())
     print("크롤링 완료")
 
 try :
