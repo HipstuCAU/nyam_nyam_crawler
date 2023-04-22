@@ -43,4 +43,8 @@ jobs:
         git config --local user.name "Auto - update CrawlerData"
         git add ./Crawler/Doc/CAUMealData.json
         git commit -m "Auto - Update data with Crawling" # 커밋 메세지
-        git push
+    - name: Push
+      uses: ad-m/github-push-action@master
+      with:
+        branch: 'testRunCrawler'
+        github_token: ${{ secrets.TOKEN_TAEKH }}
