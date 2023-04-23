@@ -5,13 +5,13 @@ import math
 import json
 from google.cloud import firestore
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Doc/hasikServiceAccountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Crawler/Doc/hasikServiceAccountKey.json"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 시작 시간
 start = time.time()
 
 def jsonParser(data):
-    with open(os.path.join(BASE_DIR, 'CAUMealData.json'), 'w+', encoding='utf-8') as f :
+    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'w+', encoding='utf-8') as f :
         json.dump(data, f, ensure_ascii=False, indent='\t')
 
 
@@ -55,7 +55,7 @@ def getMealInfo(mealSchedule) :
 # 데일리 메뉴 정보 가져오는 함수
 def getDayOfMeal() :
     dailyMenuInfoDict = {}
-    for mealSchedule in range(1, 4) :
+    for mealSchedule in range(1, 2) :
         getMealSchedule = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-right.nb-t-right > ol > li:nth-child('+ str(mealSchedule) +')')
         dailyMenuInfoDict[mealSchedule-1] = {}
         getMealSchedule.click()
@@ -66,8 +66,8 @@ def getDayOfMeal() :
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal() :
     weeklyMenuDict = {}
-    weeklyIndex = 7
-    for campus in range(1, 3):
+    weeklyIndex = 1
+    for campus in range(1, 2):
         weeklyMenuDict[campus-1] = {}
         for day in range(weeklyIndex) :
             getCampus = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > header > div > ol > li:nth-child(' + str(campus) + ') > span')
@@ -104,10 +104,10 @@ try :
 
     #Set FireStore
     db = firestore.Client()
-    doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
+    doc_ref = db.collection(u'CAU_Haksik').document('Test_Doc')
 
     try:
-        with open(os.path.join(BASE_DIR, './CAUMealData.json'), 'r') as f:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
             cafeteria_data_dic = json.load(f)
         doc_ref.set(cafeteria_data_dic)
     except Exception as e:
