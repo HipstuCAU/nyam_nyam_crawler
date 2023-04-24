@@ -35,6 +35,13 @@ jobs:
         sudo apt-get install google-chrome-stable    
         wget https://chromedriver.storage.googleapis.com/2.40/chromedriver_linux64.zip
         unzip ./chromedriver_linux64.zip
+        
+    - name: Add FireBaseAccountKey # FireBaseAccountKey 생성
+      id: create-json
+      uses: jsdaniell/create-json@v1.2.2
+      with:
+        name: "firebaseServiceAccountKey.json"
+        json: ${{ secrets.FIREBASE_SERVICEACCOUNTKEY }}
       
     - name: Run main.py # main.py 실행
       run: | 
