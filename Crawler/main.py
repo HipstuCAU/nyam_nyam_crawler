@@ -23,6 +23,7 @@ def getMealInfo(mealSchedule) :
         menuCount = 0
         try :
             cafeteriaName = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dt').text
+            cafeteriaName = cafeteriaName.replace('다빈치', '안성')
             menuInfoDict[cafeteriaName] = {}
             if cafeteriaIndex != 1 :
                 getcafeteria = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dt > a')
