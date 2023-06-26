@@ -45,6 +45,7 @@ def getMealInfo(mealSchedule) :
                     mealInfo = getMealInfo.text
                     mealInfo = mealInfo.replace('<일품>', '')
                     mealInfo = mealInfo.replace('특)', '')
+                    mealInfo = mealInfo.replace('(중식만가능)', '')
                     menuInfoDict[cafeteriaName][MenuType]['menu'] = mealInfo.replace('\n', '|')
                 except :
                     pass
