@@ -24,7 +24,7 @@ def getMealInfo(mealSchedule) :
         try :
             cafeteriaName = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dt').text
             cafeteriaName = cafeteriaName.replace('다빈치', '안성')
-            menuInfoDict[cafeteriaName] = {}
+            menuInfoDict = {'name': cafeteriaName, 'menu': []}
             if cafeteriaIndex != 1 :
                 getcafeteria = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dt > a')
                 getcafeteria.click()
@@ -34,19 +34,21 @@ def getMealInfo(mealSchedule) :
                 try :
                     getcafeteriaInfo = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +')')
                     MenuType = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > ul > li:nth-child(2) > span').text
-                    menuInfoDict[cafeteriaName][MenuType] = {}
+                    
                     getMealPrice = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > ul > li:nth-child(3) > span')
-                    menuInfoDict[cafeteriaName][MenuType]['price'] = getMealPrice.text
+                    
                     getcafeteriaInfo.click()
                     time.sleep(0.5)
                     getMealTime = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > div > div.nb-p-04-02 > div.nb-p-04-02-01.nb-font-12 > p.nb-p-04-02-01-b')
                     getMealInfo = dr.find_element(By.CSS_SELECTOR, '#carteP005 > li > dl:nth-child('+ str(cafeteriaIndex) +') > dd:nth-child('+ str(cafeteriaInfoIndex) +') > label > div > div.nb-p-04-03.nb-font-13.nb-p-flex.nb-wrap.ng-binding')
-                    menuInfoDict[cafeteriaName][MenuType]['time'] = getMealTime.text
+                    start_time, end_time = getMealTime.text.split("~")
                     mealInfo = getMealInfo.text
                     mealInfo = mealInfo.replace('<일품>', '')
                     mealInfo = mealInfo.replace('특)', '')
                     mealInfo = mealInfo.replace('(중식만가능)', '')
-                    menuInfoDict[cafeteriaName][MenuType]['menu'] = mealInfo.replace('\n', '|')
+                    menu_item = {'price': getMealPrice.text, 'startTime': start_time, 'endTime': end_time, 'menu': mealInfo.split('|')}
+                    menuInfoDict['menu'].append({MenuType: menu_item})
+
                 except :
                     pass
                 if cafeteriaName != "학생식당(303관B1층)" and menuCount == 5 : break
@@ -57,18 +59,20 @@ def getMealInfo(mealSchedule) :
 # 데일리 메뉴 정보 가져오는 함수
 def getDayOfMeal() :
     dailyMenuInfoDict = {}
+    mealTimeList = ["breakfast", "lunch", "dinner"]
+
     for mealSchedule in range(1, 4) :
         getMealSchedule = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-right.nb-t-right > ol > li:nth-child('+ str(mealSchedule) +')')
-        dailyMenuInfoDict[mealSchedule-1] = {}
+        dailyMenuInfoDict[mealTimeList[mealSchedule-1]] = {}
         getMealSchedule.click()
         time.sleep(0.5)
-        dailyMenuInfoDict[mealSchedule-1] = getMealInfo(mealSchedule)
+        dailyMenuInfoDict[mealTimeList[mealSchedule-1]] = getMealInfo(mealSchedule)
     return dailyMenuInfoDict
 
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal() :
     weeklyMenuDict = {}
-    weeklyIndex = 7
+    weeklyIndex = 5
     for campus in range(1, 3):
         weeklyMenuDict[campus-1] = {}
         for day in range(weeklyIndex) :
@@ -76,7 +80,8 @@ def getWeekOfMeal() :
             getCampus.click()
             time.sleep(0.5)
             getDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > p')
-            weeklyMenuDict[campus-1][getDay.text] = getDayOfMeal()
+            weeklyMenuDict[campus-1]['date'] = getDay.text
+            weeklyMenuDict[campus-1].update(getDayOfMeal())
             time.sleep(0.3)
             setNextDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-next').click()
             setNextDay
@@ -86,7 +91,9 @@ def getWeekOfMeal() :
     return weeklyMenuDict
 
 def runCrawler():
-    jsonParser(getWeekOfMeal())
+    test = getWeekOfMeal()
+    print(test)
+    jsonParser(test)
     print("크롤링 완료")
 
 try :
@@ -105,16 +112,16 @@ try :
     runCrawler()
 
     #Set FireStore
-    db = firestore.Client()
-    doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
+    #db = firestore.Client()
+    #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
 
-    try:
-        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
-            cafeteria_data_dic = json.load(f)
-        doc_ref.set(cafeteria_data_dic)
-    except Exception as e:
-        print("예외 발생 : ", e)
-        runCrawler()
+    #try:
+    #    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
+    #        cafeteria_data_dic = json.load(f)
+    #    doc_ref.set(cafeteria_data_dic)
+    #except Exception as e:
+    #    print("예외 발생 : ", e)
+    #    runCrawler()
 
 except Exception as e:
     print(e)
