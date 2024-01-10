@@ -72,16 +72,17 @@ def getDayOfMeal() :
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal() :
     weeklyMenuDict = {}
-    weeklyIndex = 5
+    weeklyIndex = 3
     for campus in range(1, 3):
-        weeklyMenuDict[campus-1] = {}
+        weeklyMenuDict[campus-1] = {'menuData': []}  # 각 캠퍼스별로 'days'라는 키에 날짜와 메뉴 정보를 저장할 리스트를 만듭니다.
         for day in range(weeklyIndex) :
             getCampus = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > header > div > ol > li:nth-child(' + str(campus) + ') > span')
             getCampus.click()
             time.sleep(0.5)
             getDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > p')
-            weeklyMenuDict[campus-1]['date'] = getDay.text
-            weeklyMenuDict[campus-1].update(getDayOfMeal())
+            day_info = {'date': getDay.text}
+            day_info.update(getDayOfMeal())
+            weeklyMenuDict[campus-1]['menuData'].append(day_info)
             time.sleep(0.3)
             setNextDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-next').click()
             setNextDay
@@ -89,6 +90,7 @@ def getWeekOfMeal() :
             setPrevDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-prev').click()
             setPrevDay
     return weeklyMenuDict
+
 
 def runCrawler():
     test = getWeekOfMeal()
