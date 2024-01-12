@@ -5,7 +5,7 @@ import math
 import json
 from google.cloud import firestore
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./firebaseServiceAccountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Doc/firebaseServiceAccountKey.json"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 시작 시간
 start = time.time()
@@ -56,7 +56,7 @@ def getMealInfo(mealSchedule):
 
                     print(mealInfo)
                     menu_item = {'price': price, 'startTime': start_time, 'endTime': end_time, 'menu': mealInfo}
-                    cafeteriaInfo['menu'].append({MenuType: menu_item})
+                    cafeteriaInfo['menu'].append(menu_item)
                 except:
                     pass
 
@@ -89,27 +89,30 @@ def getDayOfMeal():
 
 
 # 위클리 메뉴 정보 가져오는 함수
-def getWeekOfMeal() :
-    weeklyMenuDict = {}
-    weeklyIndex = 1
+def getWeekOfMeal():
+    weeklyMenuList = []
+    #날짜 설정 ( 5일 기본 )
+    weeklyIndex = 3
     campusName = ["seoul", "davinci"]
-    for campus in range(1, 3):
-        weeklyMenuDict[campusName[campus-1]] = {'menuData': []}  # 각 캠퍼스별로 'days'라는 키에 날짜와 메뉴 정보를 저장할 리스트를 만듭니다.
-        for day in range(weeklyIndex) :
+    for campus in range(1, 3) :
+        weeklyMenuDict = {'campus': campusName[campus - 1], 'menuData': []}
+        for dayIndex in range(weeklyIndex):
             getCampus = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > header > div > ol > li:nth-child(' + str(campus) + ') > span')
             getCampus.click()
             time.sleep(0.5)
             getDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > p')
             day_info = {'date': getDay.text}
             day_info.update(getDayOfMeal())
-            weeklyMenuDict[campusName[campus-1]]['menuData'].append(day_info)
+            weeklyMenuDict['menuData'].append(day_info)
             time.sleep(0.3)
             setNextDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-next').click()
-            setNextDay
-        for day in range(weeklyIndex):
+        for _ in range(weeklyIndex):
             setPrevDay = dr.find_element(By.CSS_SELECTOR, '#P005 > div > div > div > div > ol > li > header > div.nb-left > div > a.nb-p-time-select-prev').click()
-            setPrevDay
-    return weeklyMenuDict
+
+        weeklyMenuList.append(weeklyMenuDict)
+
+    return {'results': weeklyMenuList}
+
 
 
 def runCrawler():
@@ -126,28 +129,33 @@ try :
     options.add_argument("--no-sandbox")
 
     # chrome driver
-    dr = webdriver.Chrome('chromedriver', chrome_options=options)
-    dr.implicitly_wait(3)    
-    dr.get('https://mportal.cau.ac.kr/main.do')
+    #dr = webdriver.Chrome('chromedriver', chrome_options=options)
+    #dr.implicitly_wait(3)    
+    #dr.get('https://mportal.cau.ac.kr/main.do')
 
     #run Crawler
-    runCrawler()
+    #runCrawler()
 
     #Set FireStore
-    #db = firestore.Client()
+
+    db = firestore.Client()
+    
+    #Test Document
+
+    doc_ref = db.collection(u'CAU_Haksik').document('Test_Doc')
     #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
 
-    #try:
-    #    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
-    #        cafeteria_data_dic = json.load(f)
-    #    doc_ref.set(cafeteria_data_dic)
-    #except Exception as e:
-    #    print("예외 발생 : ", e)
-    #    runCrawler()
+    try:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
+            cafeteria_data_dic = json.load(f)
+        doc_ref.set(cafeteria_data_dic)
+    except Exception as e:
+        print("예외 발생 : ", e)
+        runCrawler()
 
 except Exception as e:
     print(e)
-    dr.quit()
+    #dr.quit()
 
 finally:
     print("최신화 완료")
@@ -155,4 +163,4 @@ finally:
     minute = processTime / 60
     second = processTime % 60
     print("실행 시간 :", math.trunc(minute), "분 ", round(second), "초")
-    dr.quit()
+    #dr.quit()
