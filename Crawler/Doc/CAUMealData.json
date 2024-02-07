@@ -290,14 +290,14 @@
 							]
 						}
 					],
-					"lunch": [
+					"all": [
 						{
 							"name": "(안성)라면",
 							"menu": [
 								{
 									"price": "2500",
-									"startTime": "11:00",
-									"endTime": "16:00",
+									"startTime": "시간 알려줘",
+									"endTime": "이것도",
 									"menu": [
 										"신라면",
 										"너구리",
