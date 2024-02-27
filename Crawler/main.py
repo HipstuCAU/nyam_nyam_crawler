@@ -7,16 +7,18 @@ from google.cloud import firestore
 import os
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Doc/firebaseServiceAccountKey.json"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# 시작 시간
+
+# - Setup Start Time
 start = time.time()
 
+old_data = []
+new_data = []
+
 def jsonParser(data):
-    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'w+', encoding='utf-8') as f :
+    with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'w+', encoding='utf-8') as f :
         json.dump(data, f, ensure_ascii=False, indent='\t')
 
-
-
-# 식당 메뉴 정보 가져오는 함수
+# - Get Cafeteria Menu at Meal Schedule
 def getMealInfo(mealSchedule):
     menuInfoList = []
     for cafeteriaIndex in range(1, 10):
@@ -51,10 +53,8 @@ def getMealInfo(mealSchedule):
                     mealInfo = mealInfo.replace('<일품>', '')
                     mealInfo = mealInfo.replace('특)', '')
                     mealInfo = mealInfo.replace('(중식만가능)', '')
-                    print(mealInfo)
                     mealInfo = mealInfo.split('\n')
 
-                    print(mealInfo)
                     menu_item = {'price': price, 'startTime': start_time, 'endTime': end_time, 'menu': mealInfo}
                     cafeteriaInfo['menu'].append(menu_item)
                 except:
@@ -70,7 +70,7 @@ def getMealInfo(mealSchedule):
 
     return menuInfoList
 
-# 데일리 메뉴 정보 가져오는 함수
+# - Get Daily Menu
 def getDayOfMeal():
     dailyMenuInfoDict = {}
 
@@ -86,13 +86,10 @@ def getDayOfMeal():
 
     return dailyMenuInfoDict
 
-
-
-# 위클리 메뉴 정보 가져오는 함수
+# - Get Weekly Menu
 def getWeekOfMeal():
     weeklyMenuList = []
-    #날짜 설정 ( 5일 기본 )
-    weeklyIndex = 3
+    weeklyIndex = 3 # - Set Crawer Day
     campusName = ["seoul", "davinci"]
     for campus in range(1, 3) :
         weeklyMenuDict = {'campus': campusName[campus - 1], 'menuData': []}
@@ -113,37 +110,93 @@ def getWeekOfMeal():
 
     return {'results': weeklyMenuList}
 
-
-
 def runCrawler():
-    test = getWeekOfMeal()
-    print(test)
-    jsonParser(test)
+    old_data = getWeekOfMeal()
+    #print(old_data)
+    jsonParser(old_data)
     print("크롤링 완료")
+
+def parse_old_data(results):
+    parsed_data = []
+    meal_type_mapping = {
+        "breakfast": "아침",
+        "lunch": "점심",
+        "dinner": "저녁"
+    }
+    for result in results['results']:
+        campus = result["campus"]
+        for menu_data in result["menuData"]:
+            date = menu_data["date"]
+            cafeterias = []
+            for meal_type in ["breakfast", "lunch", "dinner"]:
+                if meal_type in menu_data:
+                    for cafeteria in menu_data[meal_type]:
+                        cafeteria_info = {
+                            "cafeteriaID": cafeteria["name"],
+                            "meals": []
+                        }
+                        meal_info_dict = {}
+                        for meal in cafeteria["menu"]:
+                            meal_type_str = meal_type_mapping[meal_type]
+                            if meal_type_str not in meal_info_dict:
+                                meal_info_dict[meal_type_str] = {
+                                    "mealType": meal_type_str,
+                                    "shouldShowTime": True,
+                                    "startTime": meal["startTime"],
+                                    "endTime": meal["endTime"],
+                                    "menus": []
+                                }
+                            meal_info_dict[meal_type_str]["menus"].append({
+                                "menuType": "",
+                                "price": meal["price"],
+                                "startTime": meal["startTime"],
+                                "endTime": meal["endTime"],
+                                "menu": meal["menu"],
+                                "calories": ""
+                            })
+                        cafeterias.append(cafeteria_info)
+                        cafeteria_info["meals"].extend(meal_info_dict.values())
+                        
+            parsed_data.append({
+                "campus": campus,
+                "date": date,
+                "cafeterias": cafeterias
+            })
+    return parsed_data
+
 
 try :
     options = webdriver.ChromeOptions()
     options.add_argument("start-maximized")
     options.add_argument("lang=ko_KR")
-    #options.add_argument('headless')
+    options.add_argument('headless')
     options.add_argument("--no-sandbox")
 
-    # chrome driver
-    #dr = webdriver.Chrome('chromedriver', chrome_options=options)
-    #dr.implicitly_wait(3)    
-    #dr.get('https://mportal.cau.ac.kr/main.do')
+    # - Run Chrome Driver
+    dr = webdriver.Chrome('chromedriver', chrome_options=options)
+    dr.implicitly_wait(3)    
+    dr.get('https://mportal.cau.ac.kr/main.do')
 
-    #run Crawler
-    #runCrawler()
+    # - Run Crawler
+    runCrawler()
 
-    #Set FireStore
+    # - Change Data
+    try:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'r') as f:
+            old_data = json.load(f)
+    except Exception as e:
+        print("예외 발생 : ", e)
+    new_data = parse_old_data(old_data)
+    if new_data != []:
+        jsonParser(new_data)
+
+    # - Setup FireStore
 
     db = firestore.Client()
     
-    #Test Document
-
-    doc_ref = db.collection(u'CAU_Haksik').document('Test_Doc')
-    #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
+    
+    doc_ref = db.collection(u'CAU_Haksik').document('Test_Doc') # - TEST Server
+    #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu') # - Main Server
 
     try:
         with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
@@ -155,7 +208,7 @@ try :
 
 except Exception as e:
     print(e)
-    #dr.quit()
+    dr.quit()
 
 finally:
     print("최신화 완료")
@@ -163,4 +216,4 @@ finally:
     minute = processTime / 60
     second = processTime % 60
     print("실행 시간 :", math.trunc(minute), "분 ", round(second), "초")
-    #dr.quit()
+    dr.quit()
