@@ -89,7 +89,7 @@ def getDayOfMeal():
 # - Get Weekly Menu
 def getWeekOfMeal():
     weeklyMenuList = []
-    weeklyIndex = 5     # - Set Crawer Day
+    weeklyIndex = 7     # - Set Crawer Day
     campusName = ["seoul", "davinci"]
     for campus in range(1, 3) :
         weeklyMenuDict = {'campus': campusName[campus - 1], 'menuData': []}
