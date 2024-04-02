@@ -89,7 +89,7 @@ def getDayOfMeal():
 # - Get Weekly Menu
 def getWeekOfMeal():
     weeklyMenuList = []
-    weeklyIndex = 3 # - Set Crawer Day
+    weeklyIndex = 5     # - Set Crawer Day
     campusName = ["seoul", "davinci"]
     for campus in range(1, 3) :
         weeklyMenuDict = {'campus': campusName[campus - 1], 'menuData': []}
@@ -116,25 +116,32 @@ def runCrawler():
     jsonParser(old_data)
     print("크롤링 완료")
 
-def parse_old_data(results):
+def parse_menu_data(results):
     parsed_data = []
     meal_type_mapping = {
         "breakfast": "아침",
         "lunch": "점심",
         "dinner": "저녁"
     }
+    cafeteria_id_mapping = {
+        "학생식당(303관B1층)": "K001001001",
+        "참슬기식당(310관 B4층)": "K001001002",
+        "생활관식당(블루미르308관)":"K001001003",
+        "생활관식당(블루미르309관)":"K001001004",
+        "University Club(102관11층)":"K001001005",
+        "카우잇츠(cau eats)":"K001002006",
+        "(안성)카우버거":"K001002007",
+        "(안성)라면":"K001002008"
+    }
     for result in results['results']:
         campus = result["campus"]
         for menu_data in result["menuData"]:
             date = menu_data["date"]
-            cafeterias = []
+            cafeterias = {}
             for meal_type in ["breakfast", "lunch", "dinner"]:
                 if meal_type in menu_data:
                     for cafeteria in menu_data[meal_type]:
-                        cafeteria_info = {
-                            "cafeteriaID": cafeteria["name"],
-                            "meals": []
-                        }
+                        cafeteria_id = cafeteria_id_mapping[cafeteria["name"]]
                         meal_info_dict = {}
                         for meal in cafeteria["menu"]:
                             meal_type_str = meal_type_mapping[meal_type]
@@ -154,15 +161,19 @@ def parse_old_data(results):
                                 "menu": meal["menu"],
                                 "calories": ""
                             })
-                        cafeterias.append(cafeteria_info)
-                        cafeteria_info["meals"].extend(meal_info_dict.values())
-                        
+                        if cafeteria_id in cafeterias:
+                            for meal_type_str, meals in meal_info_dict.items():
+                                cafeterias[cafeteria_id]["meals"].append(meals)
+                        else:
+                            cafeterias[cafeteria_id] = {
+                                "cafeteriaID": cafeteria_id,
+                                "meals": list(meal_info_dict.values())
+                            }
             parsed_data.append({
-                "campus": campus,
                 "date": date,
-                "cafeterias": cafeterias
+                "cafeterias": list(cafeterias.values())
             })
-    return parsed_data
+    return {"results": parsed_data}
 
 
 try :
@@ -186,25 +197,23 @@ try :
             old_data = json.load(f)
     except Exception as e:
         print("예외 발생 : ", e)
-    new_data = parse_old_data(old_data)
+    new_data = parse_menu_data(old_data)
     if new_data != []:
         jsonParser(new_data)
 
     # - Setup FireStore
-
     db = firestore.Client()
-    
     
     doc_ref = db.collection(u'CAU_Haksik').document('Test_Doc') # - TEST Server
     #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu') # - Main Server
 
     try:
-        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'r') as f:
             cafeteria_data_dic = json.load(f)
         doc_ref.set(cafeteria_data_dic)
     except Exception as e:
         print("예외 발생 : ", e)
-        runCrawler()
+        #runCrawler()
 
 except Exception as e:
     print(e)
