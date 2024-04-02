@@ -5,7 +5,7 @@ import math
 import json
 from google.cloud import firestore
 import os
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./Doc/firebaseServiceAccountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./firebaseServiceAccountKey.json"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # - Setup Start Time
@@ -15,7 +15,7 @@ old_data = []
 new_data = []
 
 def jsonParser(data):
-    with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'w+', encoding='utf-8') as f :
+    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'w+', encoding='utf-8') as f :
         json.dump(data, f, ensure_ascii=False, indent='\t')
 
 # - Get Cafeteria Menu at Meal Schedule
@@ -193,7 +193,7 @@ try :
 
     # - Change Data
     try:
-        with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'r') as f:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
             old_data = json.load(f)
     except Exception as e:
         print("예외 발생 : ", e)
@@ -208,7 +208,7 @@ try :
     #doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu') # - Main Server
 
     try:
-        with open(os.path.join(BASE_DIR, './Doc/CAUMealDataTest.json'), 'r') as f:
+        with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r') as f:
             cafeteria_data_dic = json.load(f)
         doc_ref.set(cafeteria_data_dic)
     except Exception as e:
