@@ -51,71 +51,57 @@ def getMealInfo():
                 print(f"  처리 중: {cafeteriaName}")
                 menuInfoDict[cafeteriaName] = {}
                 
-                # 식당 클릭하여 메뉴 펼치기
-                try:
-                    dt_element = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
-                    dr.execute_script("arguments[0].click();", dt_element)
-                    time.sleep(0.7)
-                except Exception as e:
-                    print(f"    클릭 실패: {e}")
+                # 첫 번째 식당이면 이미 열려 있으므로 클릭하지 않음
+                if idx != 0:
+                    try:
+                        dt_element = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
+                        dr.execute_script("arguments[0].click();", dt_element)
+                        time.sleep(0.7)
+                    except Exception as e:
+                        print(f"    클릭 실패: {e}")
                 
-                # 메뉴 항목들 다시 찾기 (클릭 후 DOM이 변경되므로)
+                # 메뉴 항목들 수집
                 menuItems = cafeteria.find_elements(By.CSS_SELECTOR, 'dd')
                 print(f"    메뉴 항목 수: {len(menuItems)}")
                 
                 for menuItem in menuItems:
                     try:
-                        # ng-hide 클래스가 있으면 건너뛰기
                         if 'ng-hide' in menuItem.get_attribute('class'):
                             continue
                         
-                        # 시간 가져오기
                         timeText = ""
+                        courseText = ""
+                        priceText = ""
+                        menuDetail = ""
+
                         try:
                             timeText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.time"]').text.strip()
                         except:
                             pass
-                        
-                        # 코스명 가져오기
-                        courseText = ""
                         try:
                             courseText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.course"]').text.strip()
                         except:
                             pass
-                        
-                        # 가격 가져오기
-                        priceText = ""
                         try:
                             priceText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.price"]').text.strip()
                         except:
                             pass
-                        
-                        # 메뉴 상세 가져오기
-                        menuDetail = ""
                         try:
-                            # ng-bind-html로 된 div 찾기
                             menuDiv = menuItem.find_element(By.CSS_SELECTOR, 'div[ng-bind-html]')
-                            
-                            # p 태그들이 있으면 그것으로
                             menuPs = menuDiv.find_elements(By.TAG_NAME, 'p')
                             if menuPs:
                                 menuDetailList = [p.text.strip() for p in menuPs if p.text.strip()]
                                 menuDetail = '|'.join(menuDetailList)
                             else:
-                                # p 태그가 없으면 전체 텍스트
                                 menuDetail = menuDiv.text.strip()
-                        except Exception as e:
+                        except:
                             pass
                         
-                        # 메뉴 정보 정리
                         menuDetail = menuDetail.replace('<일품>', '').replace('특)', '').replace('(중식만가능)', '')
-                        
-                        # 빈 코스명 처리
                         if not courseText:
                             courseText = "기타"
                         
-                        # 저장
-                        if timeText or priceText or menuDetail:  # 최소한 하나라도 있어야 저장
+                        if timeText or priceText or menuDetail:
                             menuInfoDict[cafeteriaName][courseText] = {
                                 'time': timeText,
                                 'price': priceText,
