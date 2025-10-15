@@ -156,16 +156,14 @@ def getDayOfMeal():
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal():
     weeklyMenuDict = {}
-    weeklyIndex = 2
-    
+    weeklyIndex = 7  # 최근 7일
     try:
-        # 서울, 다빈치 캠퍼스 탭 찾기
+        # 캠퍼스 탭 찾기
         campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
         print(f"캠퍼스 수: {len(campusTabs)}")
         
         for campusIdx in range(len(campusTabs)):
             weeklyMenuDict[campusIdx] = {}
-            
             try:
                 # 캠퍼스 탭 다시 찾아서 클릭
                 campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
@@ -176,10 +174,10 @@ def getWeekOfMeal():
                 dr.execute_script("arguments[0].click();", campusTab)
                 time.sleep(1.5)
                 
-                # 7일치 데이터 수집
+                # 오늘 날짜 기준으로 최근 7일 수집
                 for day in range(weeklyIndex):
                     try:
-                        # 현재 날짜 가져오기
+                        # 날짜 가져오기
                         dateElement = dr.find_element(By.CSS_SELECTOR, 'p.nb-p-time-select-current')
                         currentDate = dateElement.text.strip()
                         
@@ -198,15 +196,14 @@ def getWeekOfMeal():
                         print(f"날짜 {day} 처리 오류: {e}")
                         continue
                 
-                # 원래 날짜로 되돌리기
-                print(f"\n{campusName} 날짜 되돌리는 중...")
-                for day in range(weeklyIndex):
+                # 마지막으로 다시 오늘 날짜로 되돌리기
+                while True:
                     try:
-                        prevButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-prev')
-                        dr.execute_script("arguments[0].click();", prevButton)
+                        nextButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-next')
+                        dr.execute_script("arguments[0].click();", nextButton)
                         time.sleep(0.3)
                     except:
-                        pass
+                        break
                 
             except Exception as e:
                 print(f"캠퍼스 {campusIdx} 처리 오류: {e}")
