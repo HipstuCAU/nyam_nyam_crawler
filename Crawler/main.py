@@ -156,66 +156,63 @@ def getDayOfMeal():
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal():
     weeklyMenuDict = {}
-    weeklyIndex = 7  # 최근 7일
+    weeklyIndex = 7  # 오늘 기준 앞으로 7일
+
     try:
-        # 캠퍼스 탭 찾기
         campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
         print(f"캠퍼스 수: {len(campusTabs)}")
-        
+
         for campusIdx in range(len(campusTabs)):
             weeklyMenuDict[campusIdx] = {}
+
             try:
-                # 캠퍼스 탭 다시 찾아서 클릭
+                # 캠퍼스 탭 클릭
                 campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
                 campusTab = campusTabs[campusIdx]
                 campusName = campusTab.text.strip()
-                
                 print(f"\n=== {campusName} 캠퍼스 크롤링 시작 ===")
                 dr.execute_script("arguments[0].click();", campusTab)
                 time.sleep(1.5)
-                
-                # 오늘 날짜 기준으로 최근 7일 수집
+
+                # 오늘 기준 앞으로 7일
                 for day in range(weeklyIndex):
                     try:
-                        # 날짜 가져오기
                         dateElement = dr.find_element(By.CSS_SELECTOR, 'p.nb-p-time-select-current')
                         currentDate = dateElement.text.strip()
-                        
                         print(f"\n날짜: {currentDate}")
-                        
-                        # 해당 날짜의 메뉴 정보 수집
+
                         weeklyMenuDict[campusIdx][currentDate] = getDayOfMeal()
-                        
-                        # 다음 날로 이동 (마지막 날이 아닐 때만)
+
+                        # 마지막 날이 아니면 다음 날로 이동
                         if day < weeklyIndex - 1:
                             nextButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-next')
                             dr.execute_script("arguments[0].click();", nextButton)
                             time.sleep(1)
-                        
+
                     except Exception as e:
                         print(f"날짜 {day} 처리 오류: {e}")
                         continue
-                
-                # 마지막으로 다시 오늘 날짜로 되돌리기
-                while True:
+
+                # 캠퍼스 바뀌기 전에 오늘 날짜로 되돌리기
+                for _ in range(weeklyIndex - 1):  # 이미 오늘 데이터 포함했으니 1빼고 뒤로
                     try:
-                        nextButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-next')
-                        dr.execute_script("arguments[0].click();", nextButton)
+                        prevButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-prev')
+                        dr.execute_script("arguments[0].click();", prevButton)
                         time.sleep(0.3)
                     except:
                         break
-                
+
             except Exception as e:
                 print(f"캠퍼스 {campusIdx} 처리 오류: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
-        
+
     except Exception as e:
         print(f"getWeekOfMeal 오류: {e}")
         import traceback
         traceback.print_exc()
-    
+
     return weeklyMenuDict
 
 def runCrawler():
