@@ -27,14 +27,32 @@ def getMealInfo(mealSchedule):
         
         for cafeteria in cafeterias:
             try:
-                # 식당명 가져오기
-                cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt > a > span').text
+                # 식당명 가져오기 (여러 패턴 시도)
+                cafeteriaName = None
+                try:
+                    cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt > a > span').text
+                except:
+                    try:
+                        cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt > span').text
+                    except:
+                        try:
+                            cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt').text
+                        except:
+                            continue
+                
+                if not cafeteriaName:
+                    continue
+                    
                 cafeteriaName = cafeteriaName.replace('다빈치', '안성')
                 menuInfoDict[cafeteriaName] = {}
                 
                 # 식당 클릭 (메뉴 표시)
-                cafeteriaButton = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
-                cafeteriaButton.click()
+                try:
+                    cafeteriaButton = cafeteria.find_element(By.CSS_SELECTOR, 'dt > a')
+                    cafeteriaButton.click()
+                except:
+                    cafeteriaButton = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
+                    cafeteriaButton.click()
                 time.sleep(0.5)
                 
                 # 해당 식당의 모든 메뉴 항목 가져오기
@@ -98,7 +116,7 @@ def getDayOfMeal():
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal():
     weeklyMenuDict = {}
-    weeklyIndex = 7
+    weeklyIndex = 1
     
     try:
         # 서울, 다빈치 캠퍼스 탭 찾기
