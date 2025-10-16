@@ -51,57 +51,71 @@ def getMealInfo():
                 print(f"  처리 중: {cafeteriaName}")
                 menuInfoDict[cafeteriaName] = {}
                 
-                # 첫 번째 식당이면 이미 열려 있으므로 클릭하지 않음
-                if idx != 0:
-                    try:
-                        dt_element = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
-                        dr.execute_script("arguments[0].click();", dt_element)
-                        time.sleep(0.7)
-                    except Exception as e:
-                        print(f"    클릭 실패: {e}")
+                # 식당 클릭하여 메뉴 펼치기
+                try:
+                    dt_element = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
+                    dr.execute_script("arguments[0].click();", dt_element)
+                    time.sleep(0.7)
+                except Exception as e:
+                    print(f"    클릭 실패: {e}")
                 
-                # 메뉴 항목들 수집
+                # 메뉴 항목들 다시 찾기 (클릭 후 DOM이 변경되므로)
                 menuItems = cafeteria.find_elements(By.CSS_SELECTOR, 'dd')
                 print(f"    메뉴 항목 수: {len(menuItems)}")
                 
                 for menuItem in menuItems:
                     try:
+                        # ng-hide 클래스가 있으면 건너뛰기
                         if 'ng-hide' in menuItem.get_attribute('class'):
                             continue
                         
+                        # 시간 가져오기
                         timeText = ""
-                        courseText = ""
-                        priceText = ""
-                        menuDetail = ""
-
                         try:
                             timeText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.time"]').text.strip()
                         except:
                             pass
+                        
+                        # 코스명 가져오기
+                        courseText = ""
                         try:
                             courseText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.course"]').text.strip()
                         except:
                             pass
+                        
+                        # 가격 가져오기
+                        priceText = ""
                         try:
                             priceText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.price"]').text.strip()
                         except:
                             pass
+                        
+                        # 메뉴 상세 가져오기
+                        menuDetail = ""
                         try:
+                            # ng-bind-html로 된 div 찾기
                             menuDiv = menuItem.find_element(By.CSS_SELECTOR, 'div[ng-bind-html]')
+                            
+                            # p 태그들이 있으면 그것으로
                             menuPs = menuDiv.find_elements(By.TAG_NAME, 'p')
                             if menuPs:
                                 menuDetailList = [p.text.strip() for p in menuPs if p.text.strip()]
                                 menuDetail = '|'.join(menuDetailList)
                             else:
+                                # p 태그가 없으면 전체 텍스트
                                 menuDetail = menuDiv.text.strip()
-                        except:
+                        except Exception as e:
                             pass
                         
+                        # 메뉴 정보 정리
                         menuDetail = menuDetail.replace('<일품>', '').replace('특)', '').replace('(중식만가능)', '')
+                        
+                        # 빈 코스명 처리
                         if not courseText:
                             courseText = "기타"
                         
-                        if timeText or priceText or menuDetail:
+                        # 저장
+                        if timeText or priceText or menuDetail:  # 최소한 하나라도 있어야 저장
                             menuInfoDict[cafeteriaName][courseText] = {
                                 'time': timeText,
                                 'price': priceText,
@@ -156,63 +170,69 @@ def getDayOfMeal():
 # 위클리 메뉴 정보 가져오는 함수
 def getWeekOfMeal():
     weeklyMenuDict = {}
-    weeklyIndex = 7  # 오늘 기준 앞으로 7일
-
+    weeklyIndex = 7
+    
     try:
+        # 서울, 다빈치 캠퍼스 탭 찾기
         campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
         print(f"캠퍼스 수: {len(campusTabs)}")
-
+        
         for campusIdx in range(len(campusTabs)):
             weeklyMenuDict[campusIdx] = {}
-
+            
             try:
-                # 캠퍼스 탭 클릭
+                # 캠퍼스 탭 다시 찾아서 클릭
                 campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
                 campusTab = campusTabs[campusIdx]
                 campusName = campusTab.text.strip()
+                
                 print(f"\n=== {campusName} 캠퍼스 크롤링 시작 ===")
                 dr.execute_script("arguments[0].click();", campusTab)
                 time.sleep(1.5)
-
-                # 오늘 기준 앞으로 7일
+                
+                # 7일치 데이터 수집
                 for day in range(weeklyIndex):
                     try:
+                        # 현재 날짜 가져오기
                         dateElement = dr.find_element(By.CSS_SELECTOR, 'p.nb-p-time-select-current')
                         currentDate = dateElement.text.strip()
+                        
                         print(f"\n날짜: {currentDate}")
-
+                        
+                        # 해당 날짜의 메뉴 정보 수집
                         weeklyMenuDict[campusIdx][currentDate] = getDayOfMeal()
-
-                        # 마지막 날이 아니면 다음 날로 이동
+                        
+                        # 다음 날로 이동 (마지막 날이 아닐 때만)
                         if day < weeklyIndex - 1:
                             nextButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-next')
                             dr.execute_script("arguments[0].click();", nextButton)
                             time.sleep(1)
-
+                        
                     except Exception as e:
                         print(f"날짜 {day} 처리 오류: {e}")
                         continue
-
-                # 캠퍼스 바뀌기 전에 오늘 날짜로 되돌리기
-                for _ in range(weeklyIndex - 1):  # 이미 오늘 데이터 포함했으니 1빼고 뒤로
+                
+                # 원래 날짜로 되돌리기
+                print(f"\n{campusName} 날짜 되돌리는 중...")
+                for day in range(weeklyIndex):
                     try:
                         prevButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-prev')
                         dr.execute_script("arguments[0].click();", prevButton)
                         time.sleep(0.3)
                     except:
-                        break
-
+                        pass
+                
             except Exception as e:
                 print(f"캠퍼스 {campusIdx} 처리 오류: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
-
+        
     except Exception as e:
         print(f"getWeekOfMeal 오류: {e}")
         import traceback
         traceback.print_exc()
-
+    
     return weeklyMenuDict
 
 def runCrawler():
