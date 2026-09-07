@@ -1,293 +1,198 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-import time
-import math
+"""Collect the public CAU menu JSON API into the existing iOS/Firestore DTO."""
+import argparse
+from datetime import datetime, timedelta
+import html
 import json
-from google.cloud import firestore
 import os
+from pathlib import Path
+import re
+import time
+from zoneinfo import ZoneInfo
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./firebaseServiceAccountKey.json"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-# 시작 시간
-start = time.time()
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "Doc" / "CAUMealData.json"
+API_URL = "https://mportal2.cau.ac.kr/portlet/p005/p005.ajax"
+CAMPUS_CODES = {"0": "1", "1": "2"}
+MEAL_CODES = {"0": "10", "1": "20", "2": "40"}
+KST = ZoneInfo("Asia/Seoul")
 
-def jsonParser(data):
-    with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'w+', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent='\t')
 
-# 식당 메뉴 정보 가져오는 함수
-def getMealInfo():
-    menuInfoDict = {}
-    wait = WebDriverWait(dr, 10)
-    
+class CrawlError(RuntimeError):
+    """An incomplete or unexpected response must never replace published data."""
+
+
+def make_session():
+    session = requests.Session()
+    # These POST requests only read menus; retry transient server failures.
+    retry = Retry(total=2, backoff_factor=0.5,
+                  status_forcelist=(429, 500, 502, 503, 504),
+                  allowed_methods=frozenset({"POST"}))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update({"Accept": "application/json"})
+    return session
+
+
+def fetch_rows(session, campus, meal, daily):
+    params = {"tabs": campus, "tabs2": meal, "daily": daily}
     try:
-        # 현재 활성화된 li 안의 모든 식당(dl) 찾기
-        cafeterias = dr.find_elements(By.CSS_SELECTOR, '#carteP005 > li.on > dl.nb-p-04-list-02')
-        print(f"  찾은 식당 수: {len(cafeterias)}")
-        
-        for idx, cafeteria in enumerate(cafeterias):
-            try:
-                # 식당명 가져오기
-                cafeteriaName = None
-                try:
-                    cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt span').text.strip()
-                except:
-                    try:
-                        cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt a').text.strip()
-                    except:
-                        try:
-                            cafeteriaName = cafeteria.find_element(By.CSS_SELECTOR, 'dt').text.strip()
-                        except:
-                            continue
-                
-                if not cafeteriaName:
-                    continue
-                
-                cafeteriaName = cafeteriaName.replace('다빈치', '안성')
-                print(f"  처리 중: {cafeteriaName}")
-                menuInfoDict[cafeteriaName] = {}
-                
-                # 첫 번째 식당이면 이미 열려 있으므로 클릭하지 않음
-                if idx != 0:
-                    try:
-                        dt_element = cafeteria.find_element(By.CSS_SELECTOR, 'dt')
-                        dr.execute_script("arguments[0].click();", dt_element)
-                        time.sleep(0.7)
-                    except Exception as e:
-                        print(f"    클릭 실패: {e}")
-                
-                # 메뉴 항목들 수집
-                menuItems = cafeteria.find_elements(By.CSS_SELECTOR, 'dd')
-                print(f"    메뉴 항목 수: {len(menuItems)}")
-                
-                for menuItem in menuItems:
-                    try:
-                        if 'ng-hide' in menuItem.get_attribute('class'):
-                            continue
-                        
-                        timeText = ""
-                        courseText = ""
-                        priceText = ""
-                        menuDetail = ""
+        response = session.post(API_URL, json=params, timeout=(10, 30),
+                                allow_redirects=False)
+        response.raise_for_status()
+        if response.status_code != 200:
+            raise CrawlError(f"menu API returned HTTP {response.status_code}: {params}")
+        # The server can return an HTML error page with status 200.
+        payload = response.json()
+    except (requests.RequestException, ValueError) as error:
+        raise CrawlError(f"menu API request/JSON failed: {params}: {error}") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("list"), list):
+        raise CrawlError(f"menu API missing list: {params}")
+    if payload.get("isEmpty") not in ("Y", "N"):
+        raise CrawlError(f"menu API missing valid isEmpty flag: {params}")
+    # Y still includes restaurant/date placeholders with null menu fields.
+    # Reject actual menu content under Y, not the presence of metadata rows.
+    if payload["isEmpty"] == "Y" and any(
+        isinstance(row, dict) and row.get("menuDetail") not in (None, "")
+        for row in payload["list"]
+    ):
+        raise CrawlError(f"menu API inconsistent empty flag: {params}")
+    return payload["list"]
 
-                        try:
-                            timeText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.time"]').text.strip()
-                        except:
-                            pass
-                        try:
-                            courseText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.course"]').text.strip()
-                        except:
-                            pass
-                        try:
-                            priceText = menuItem.find_element(By.CSS_SELECTOR, 'span[ng-bind="row.price"]').text.strip()
-                        except:
-                            pass
-                        try:
-                            menuDiv = menuItem.find_element(By.CSS_SELECTOR, 'div[ng-bind-html]')
-                            menuPs = menuDiv.find_elements(By.TAG_NAME, 'p')
-                            if menuPs:
-                                menuDetailList = [p.text.strip() for p in menuPs if p.text.strip()]
-                                menuDetail = '|'.join(menuDetailList)
-                            else:
-                                menuDetail = menuDiv.text.strip()
-                        except:
-                            pass
-                        
-                        menuDetail = menuDetail.replace('<일품>', '').replace('특)', '').replace('(중식만가능)', '')
-                        if not courseText:
-                            courseText = "기타"
-                        
-                        if timeText or priceText or menuDetail:
-                            menuInfoDict[cafeteriaName][courseText] = {
-                                'time': timeText,
-                                'price': priceText,
-                                'menu': menuDetail
-                            }
-                        
-                    except Exception as e:
-                        print(f"    메뉴 항목 오류: {e}")
-                        continue
-                
-            except Exception as e:
-                print(f"  식당 처리 오류 ({idx}): {e}")
-                continue
-        
-    except Exception as e:
-        print(f"  getMealInfo 전체 오류: {e}")
-    
-    return menuInfoDict
 
-# 데일리 메뉴 정보 가져오는 함수
-def getDayOfMeal():
-    dailyMenuInfoDict = {}
-    
+def menu_text(value):
+    # Same comma-separated dish rendering as p005Controller.getRowData.
+    text = html.unescape(value)
+    for marker in ("<일품>", "특)", "(중식만가능)"):
+        text = text.replace(marker, "")
+    return "|".join(part.strip() for part in re.split(r"[,\r\n|]+", text) if part.strip())
+
+
+def convert_rows(rows, campus, meal, date):
+    restaurants = {}
+    for index, row in enumerate(rows):
+        label = f"campus={campus} meal={meal} date={date} row={index}"
+        if not isinstance(row, dict):
+            raise CrawlError(f"non-object row: {label}")
+        for field in ("date", "rest"):
+            if not isinstance(row.get(field), str):
+                raise CrawlError(f"missing/string field {field}: {label}")
+        if row["date"] != date:
+            raise CrawlError(f"response date mismatch: {label}")
+        if "menuDetail" not in row:
+            raise CrawlError(f"missing menuDetail: {label}")
+        # Unpublished slots contain restaurant/date metadata with all other
+        # fields null. Validate those metadata before skipping the placeholder.
+        if row["menuDetail"] is None:
+            continue
+        if not isinstance(row["menuDetail"], str):
+            raise CrawlError(f"non-string menuDetail: {label}")
+        for field in ("camp", "mCd", "course", "time", "price"):
+            if not isinstance(row.get(field), str):
+                raise CrawlError(f"missing/string field {field}: {label}")
+        if (row["camp"], row["mCd"]) != (campus, meal):
+            raise CrawlError(f"response campus/meal mismatch: {label}")
+        name = row["rest"].strip()
+        course = row["course"].strip()
+        if not name or not course:
+            raise CrawlError(f"empty restaurant/course: {label}")
+        # The shipped iOS client recognizes the current 다빈치 names.
+        name = name.replace("(안성)", "(다빈치)")
+        menu = menu_text(row["menuDetail"])
+        if not menu:
+            continue
+        dto = {"time": row["time"].strip(), "price": row["price"].strip(), "menu": menu}
+        courses = restaurants.setdefault(name, {})
+        if course in courses and courses[course] != dto:
+            raise CrawlError(f"conflicting duplicate course {name}/{course}: {label}")
+        courses[course] = dto
+    return restaurants
+
+
+def menu_count(data):
+    return sum(len(courses) for campus in data.values()
+               for day in campus.values() for meal in day.values()
+               for courses in meal.values())
+
+
+def collect_week(session, days=7, start_date=None):
+    if not 1 <= days <= 7:
+        raise ValueError("days must be between 1 and 7")
+    today = datetime.now(KST).date()
+    start_date = start_date or today
+    data = {campus: {} for campus in CAMPUS_CODES}
+    for campus, api_campus in CAMPUS_CODES.items():
+        for offset in range(days):
+            date = start_date + timedelta(days=offset)
+            daily = (date - today).days
+            date_key = date.strftime("%Y.%m.%d")
+            day = {}
+            for meal, api_meal in MEAL_CODES.items():
+                rows = fetch_rows(session, api_campus, api_meal, daily)
+                day[meal] = convert_rows(rows, api_campus, api_meal, date_key)
+                time.sleep(0.1)
+            data[campus][date_key] = day
+    if datetime.now(KST).date() != today:
+        raise CrawlError("KST date changed while crawling; retry to avoid mixed daily offsets")
+    # Empty weekend slots are valid; a wholly empty result is not publishable.
+    if menu_count(data) == 0:
+        raise CrawlError("zero menu entries; refusing to overwrite saved/published data")
+    return data
+
+
+def write_json(data, output=DATA_PATH):
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Atomic replacement after the entire crawl has been validated.
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                     dir=output.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        json.dump(data, handle, ensure_ascii=False, indent="\t")
+        handle.write("\n")
     try:
-        # 조식, 중식, 석식 탭 찾기
-        mealTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-04-list > li')
-        print(f"  식사 시간대 수: {len(mealTabs)}")
-        
-        for idx in range(len(mealTabs)):
-            try:
-                # 탭을 다시 찾아서 클릭 (stale element 방지)
-                mealTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-04-list > li')
-                tab = mealTabs[idx]
-                
-                mealType = tab.text.strip()
-                print(f"  {mealType} 수집 중...")
-                
-                dr.execute_script("arguments[0].click();", tab)
-                time.sleep(1)
-                
-                dailyMenuInfoDict[idx] = getMealInfo()
-                
-            except Exception as e:
-                print(f"  식사 시간대 {idx} 오류: {e}")
-                continue
-    
-    except Exception as e:
-        print(f"  getDayOfMeal 오류: {e}")
-    
-    return dailyMenuInfoDict
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
 
-# 위클리 메뉴 정보 가져오는 함수
-def getWeekOfMeal():
-    weeklyMenuDict = {}
-    weeklyIndex = 7
-    
+
+def upload_to_firestore(data):
+    from google.cloud import firestore
+    # Respect an explicitly supplied credential, otherwise accept the workflow's
+    # root-level key as well as the historical Crawler/ key location.
+    if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        candidates = (BASE_DIR / "firebaseServiceAccountKey.json",
+                      BASE_DIR.parent / "firebaseServiceAccountKey.json")
+        credential = next((p for p in candidates if p.is_file()), None)
+        if credential is None:
+            raise CrawlError("Firebase credential file not found")
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(credential)
+    firestore.Client().collection("CAU_Haksik").document("CAU_Cafeteria_Menu").set(data)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-upload", action="store_true")
+    parser.add_argument("--output", type=Path, default=DATA_PATH)
+    parser.add_argument("--days", type=int, default=7, choices=range(1, 8))
+    args = parser.parse_args(argv)
+    if not args.no_upload and args.days != 7:
+        parser.error("--days less than 7 requires --no-upload; refusing partial publication")
+    with make_session() as session:
+        data = collect_week(session, days=args.days)
+    write_json(data, args.output)
+    print(f"Crawled {menu_count(data)} menu entries from {len(data)} campuses.")
+    print(f"DTO: {args.output.resolve()}")
+    if not args.no_upload:
+        upload_to_firestore(data)
+        print("Firestore updated.")
+
+
+if __name__ == "__main__":
+    started_at = time.monotonic()
     try:
-        # 서울, 다빈치 캠퍼스 탭 찾기
-        campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
-        print(f"캠퍼스 수: {len(campusTabs)}")
-        
-        for campusIdx in range(len(campusTabs)):
-            weeklyMenuDict[campusIdx] = {}
-            
-            try:
-                # 캠퍼스 탭 다시 찾아서 클릭
-                campusTabs = dr.find_elements(By.CSS_SELECTOR, 'ol.nb-p-tab > li')
-                campusTab = campusTabs[campusIdx]
-                campusName = campusTab.text.strip()
-                
-                print(f"\n=== {campusName} 캠퍼스 크롤링 시작 ===")
-                dr.execute_script("arguments[0].click();", campusTab)
-                time.sleep(1.5)
-                
-                # 7일치 데이터 수집
-                for day in range(weeklyIndex):
-                    try:
-                        # 현재 날짜 가져오기
-                        dateElement = dr.find_element(By.CSS_SELECTOR, 'p.nb-p-time-select-current')
-                        currentDate = dateElement.text.strip()
-                        
-                        print(f"\n날짜: {currentDate}")
-                        
-                        # 해당 날짜의 메뉴 정보 수집
-                        weeklyMenuDict[campusIdx][currentDate] = getDayOfMeal()
-                        
-                        # 다음 날로 이동 (마지막 날이 아닐 때만)
-                        if day < weeklyIndex - 1:
-                            nextButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-next')
-                            dr.execute_script("arguments[0].click();", nextButton)
-                            time.sleep(1)
-                        
-                    except Exception as e:
-                        print(f"날짜 {day} 처리 오류: {e}")
-                        continue
-                
-                # 원래 날짜로 되돌리기
-                print(f"\n{campusName} 날짜 되돌리는 중...")
-                for day in range(weeklyIndex):
-                    try:
-                        prevButton = dr.find_element(By.CSS_SELECTOR, 'a.nb-p-time-select-prev')
-                        dr.execute_script("arguments[0].click();", prevButton)
-                        time.sleep(0.3)
-                    except:
-                        pass
-                
-            except Exception as e:
-                print(f"캠퍼스 {campusIdx} 처리 오류: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-        
-    except Exception as e:
-        print(f"getWeekOfMeal 오류: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return weeklyMenuDict
-
-def runCrawler():
-    try:
-        weeklyData = getWeekOfMeal()
-        jsonParser(weeklyData)
-        print("\n크롤링 완료!")
-        return True
-    except Exception as e:
-        print(f"크롤링 실행 오류: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-try:
-    # Chrome 옵션 설정
-    options = webdriver.ChromeOptions()
-    options.add_argument("--start-maximized")
-    options.add_argument("--lang=ko_KR")
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    
-    # Chrome driver 초기화
-    dr = webdriver.Chrome(options=options)
-    dr.implicitly_wait(5)
-    
-    # 사이트 접속
-    print("사이트 접속 중...")
-    dr.get('https://mportal2.cau.ac.kr/main.do')
-    time.sleep(3)
-    
-    # 크롤링 실행
-    if runCrawler():
-        # Firestore 업데이트
-        try:
-            print("\nFirestore 업데이트 중...")
-            db = firestore.Client()
-            doc_ref = db.collection(u'CAU_Haksik').document('CAU_Cafeteria_Menu')
-            
-            with open(os.path.join(BASE_DIR, './Doc/CAUMealData.json'), 'r', encoding='utf-8') as f:
-                cafeteria_data_dic = json.load(f)
-            
-            doc_ref.set(cafeteria_data_dic)
-            print("Firestore 업데이트 완료!")
-            
-        except Exception as e:
-            print(f"Firestore 업데이트 오류: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print("크롤링 실패")
-
-except Exception as e:
-    print(f"프로그램 실행 오류: {e}")
-    import traceback
-    traceback.print_exc()
-
-finally:
-    try:
-        dr.quit()
-    except:
-        pass
-    
-    print("\n최신화 완료")
-    processTime = time.time() - start
-    minute = processTime / 60
-    second = processTime % 60
-    print(f"실행 시간: {math.trunc(minute)}분 {round(second)}초")
+        main()
+    finally:
+        print(f"Elapsed: {time.monotonic() - started_at:.1f}s")
