@@ -6,8 +6,12 @@ name: Run_Crawler
 on:
    schedule:
      - cron: '0 16 * * *' # 오전 1시 크롤링
+   workflow_dispatch:
    push: 
     branches: [ develop ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,9 +21,9 @@ jobs:
         python-version: [3.9]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -31,10 +35,8 @@ jobs:
       run: |        
         sudo apt-get install fonts-unfonts-core
         sudo apt-get install fonts-unfonts-extra
-        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add        
-        sudo apt-get install google-chrome-stable    
-        wget https://chromedriver.storage.googleapis.com/2.40/chromedriver_linux64.zip
-        unzip ./chromedriver_linux64.zip
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
         
     - name: Add FireBaseAccountKey # FireBaseAccountKey 생성
       id: create-json
@@ -51,9 +53,10 @@ jobs:
         git config --local user.email "hth3396@gmail.com"
         git config --local user.name "Auto - update CrawlingData"
         git add ./Crawler/Doc/CAUMealData.json
-        git commit -m "Auto - Update data with Crawling" # 커밋 메세지
+        if git diff --cached --quiet; then
+          echo "No menu change to commit."
+          exit 0
+        fi
+        git commit -m "Auto - Update data with Crawling"
     - name: Push
-      uses: ad-m/github-push-action@master
-      with:
-        branch: 'develop'
-        github_token: ${{ secrets.TOKEN_TAEKH }}
+      run: git push origin HEAD:develop
