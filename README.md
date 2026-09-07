@@ -51,9 +51,15 @@ mean breakfast/lunch/dinner. All leaf fields are strings. Preserve current
 `(다빈치)` cafeteria names for the app's enum mapping.
 
 GitHub Actions first tests and crawls without publishing, then retains the DTO
-as `CAUMealData-DTO`. Scheduled/develop push runs publish to Firestore and verify
+as `CAUMealData-DTO`. `ValidateCrawler.yml` runs on PRs with read-only permissions,
+without Firebase secrets or any publishing steps.
+Scheduled/develop push runs in `RunCrawler.yml` publish to Firestore and verify
 the document by reading it back. Manual runs default to validation only;
 `publish=true` publishes only on `develop`.
+
+The production workflow is temporarily disabled while the direct deployment is
+reverted on `develop`. Re-enable it **only after this full API fix PR is merged**;
+see [incident analysis and activation steps](docs/crawler-api-incident.md).
 
 `Crawler/tests/SwiftDTOCheck.swift` is a local integration check: compile it with
 the iOS app's DataManager, Meal, MealsForDay, Campus, String+, and Date+ source

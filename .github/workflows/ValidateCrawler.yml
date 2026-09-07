@@ -1,0 +1,36 @@
+name: Validate_Crawler
+
+on:
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cau-menu-crawler-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python dependencies
+        run: pip install -r Crawler/Doc/requirements.txt
+      - name: Test API conversion and failure handling
+        run: python -m unittest discover -s Crawler -v
+      - name: Crawl and validate DTO without publishing
+        run: python Crawler/main.py --no-upload
+      - name: Save result DTO
+        uses: actions/upload-artifact@v4
+        with:
+          name: CAUMealData-DTO
+          path: Crawler/Doc/CAUMealData.json
+          if-no-files-found: error
