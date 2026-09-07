@@ -11,12 +11,14 @@ on:
         default: false
   push:
     branches: [develop]
+  pull_request:
+    branches: [develop]
 
 permissions:
   contents: write
 
 concurrency:
-  group: cau-menu-crawler
+  group: cau-menu-crawler-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: false
 
 jobs:

@@ -52,7 +52,12 @@ def fetch_rows(session, campus, meal, daily):
         raise CrawlError(f"menu API missing list: {params}")
     if payload.get("isEmpty") not in ("Y", "N"):
         raise CrawlError(f"menu API missing valid isEmpty flag: {params}")
-    if payload["isEmpty"] == "Y" and payload["list"]:
+    # Y still includes restaurant/date placeholders with null menu fields.
+    # Reject actual menu content under Y, not the presence of metadata rows.
+    if payload["isEmpty"] == "Y" and any(
+        isinstance(row, dict) and row.get("menuDetail") not in (None, "")
+        for row in payload["list"]
+    ):
         raise CrawlError(f"menu API inconsistent empty flag: {params}")
     return payload["list"]
 
@@ -71,18 +76,24 @@ def convert_rows(rows, campus, meal, date):
         label = f"campus={campus} meal={meal} date={date} row={index}"
         if not isinstance(row, dict):
             raise CrawlError(f"non-object row: {label}")
-        for field in ("camp", "mCd", "date", "rest", "course", "time", "price"):
+        for field in ("date", "rest"):
             if not isinstance(row.get(field), str):
                 raise CrawlError(f"missing/string field {field}: {label}")
-        if (row["camp"], row["mCd"], row["date"]) != (campus, meal, date):
-            raise CrawlError(f"response campus/meal/date mismatch: {label}")
+        if row["date"] != date:
+            raise CrawlError(f"response date mismatch: {label}")
         if "menuDetail" not in row:
             raise CrawlError(f"missing menuDetail: {label}")
-        # The API explicitly returns null for unpublished weekend menus.
+        # Unpublished slots contain restaurant/date metadata with all other
+        # fields null. Validate those metadata before skipping the placeholder.
         if row["menuDetail"] is None:
             continue
         if not isinstance(row["menuDetail"], str):
             raise CrawlError(f"non-string menuDetail: {label}")
+        for field in ("camp", "mCd", "course", "time", "price"):
+            if not isinstance(row.get(field), str):
+                raise CrawlError(f"missing/string field {field}: {label}")
+        if (row["camp"], row["mCd"]) != (campus, meal):
+            raise CrawlError(f"response campus/meal mismatch: {label}")
         name = row["rest"].strip()
         course = row["course"].strip()
         if not name or not course:
@@ -167,6 +178,8 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, default=DATA_PATH)
     parser.add_argument("--days", type=int, default=7, choices=range(1, 8))
     args = parser.parse_args(argv)
+    if not args.no_upload and args.days != 7:
+        parser.error("--days less than 7 requires --no-upload; refusing partial publication")
     with make_session() as session:
         data = collect_week(session, days=args.days)
     write_json(data, args.output)
