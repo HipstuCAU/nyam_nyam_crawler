@@ -1,5 +1,4 @@
-selenium==4.9.1
-requests        
+requests>=2.32.4,<3
 google-cloud-core==2.3.2
 google-cloud-firestore==2.10.0
 google-cloud-storage==2.7.0
