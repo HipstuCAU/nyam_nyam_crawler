@@ -1,11 +1,12 @@
 import json
+from datetime import datetime
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
 from main import (CrawlError, collect_week, convert_rows, fetch_rows,
-                  main, menu_count, write_json)
+                  KST, main, menu_count, write_json)
 
 
 def row(**changes):
@@ -70,6 +71,77 @@ class CrawlerTests(unittest.TestCase):
         with self.assertRaises(CrawlError):
             fetch_rows(session, "1", "20", 0)
 
+    def test_redirect_and_inconsistent_empty_flag_fail(self):
+        session = Mock()
+        response = session.post.return_value
+        response.status_code = 302
+        with self.assertRaises(CrawlError):
+            fetch_rows(session, "1", "20", 0)
+        response.status_code = 200
+        response.json.return_value = {"isEmpty": "Y", "list": [row()]}
+        with self.assertRaises(CrawlError):
+            fetch_rows(session, "1", "20", 0)
+
+    def test_api_unpublished_restaurant_placeholders(self):
+        placeholder = row(camp=None, mCd=None, course=None,
+                          time=None, price=None, menuDetail=None)
+        session = Mock()
+        response = session.post.return_value
+        response.status_code = 200
+        for flag in ("Y", "N"):
+            with self.subTest(flag=flag):
+                response.json.return_value = {"isEmpty": flag, "list": [placeholder]}
+                rows = fetch_rows(session, "1", "20", 0)
+                self.assertEqual(self.convert(rows), {})
+
+    def test_placeholder_wrong_date_and_missing_menu_field_fail(self):
+        with self.assertRaises(CrawlError):
+            self.convert([row(date="2024.01.01", menuDetail=None)])
+        placeholder = row(camp=None, mCd=None, course=None, time=None, price=None)
+        del placeholder["menuDetail"]
+        with self.assertRaises(CrawlError):
+            self.convert([placeholder])
+
+    @patch("main.upload_to_firestore")
+    @patch("main.collect_week")
+    def test_partial_days_cannot_publish(self, collect, upload):
+        with self.assertRaises(SystemExit) as error:
+            main(["--days", "1"])
+        self.assertEqual(error.exception.code, 2)
+        collect.assert_not_called()
+        upload.assert_not_called()
+
+    @patch("main.time.sleep")
+    def test_collect_both_campuses_and_all_mealtimes(self, sleep):
+        session = Mock()
+        today = datetime.now(KST).date()
+
+        def respond(url, *, json, **kwargs):
+            response = Mock(status_code=200)
+            response.json.return_value = {
+                "isEmpty": "N", "list": [row(
+                    camp=json["tabs"], mCd=json["tabs2"],
+                    date=today.strftime("%Y.%m.%d"))]}
+            return response
+
+        session.post.side_effect = respond
+        data = collect_week(session, days=1, start_date=today)
+        self.assertEqual(menu_count(data), 6)
+        self.assertEqual(set(data), {"0", "1"})
+        for campus in data.values():
+            self.assertEqual(set(campus[today.strftime("%Y.%m.%d")]), {"0", "1", "2"})
+        self.assertEqual(session.post.call_count, 6)
+
+    @patch("main.upload_to_firestore")
+    @patch("main.collect_week")
+    def test_no_upload_cli_produces_dto_without_credentials(self, collect, upload):
+        dto = {"0": {"2026.09.07": {"1": self.convert([row()])}}}
+        collect.return_value = dto
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dto.json"
+            main(["--no-upload", "--output", str(path)])
+            self.assertEqual(json.loads(path.read_text()), dto)
+            upload.assert_not_called()
     @patch("main.time.sleep")
     @patch("main.fetch_rows", return_value=[])
     def test_wholly_empty_crawl_rejected(self, fetch, sleep):
