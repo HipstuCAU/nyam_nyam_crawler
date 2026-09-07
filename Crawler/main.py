@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -29,9 +30,15 @@ def text_of(element, selector):
 
 def wait_for_menu(driver):
     wait = WebDriverWait(driver, 20)
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#convTab .nb-p-tab")))
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#convTab #carteP005")))
-    wait.until(lambda browser: len(browser.find_elements(By.CSS_SELECTOR, "#convTab .nb-p-tab > li")) >= 2)
+    try:
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#convTab .nb-p-tab")))
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#convTab #carteP005")))
+        wait.until(lambda browser: len(browser.find_elements(By.CSS_SELECTOR, "#convTab .nb-p-tab > li")) >= 2)
+    except TimeoutException as error:
+        page_text = driver.find_element(By.TAG_NAME, "body").get_attribute("innerText")[:500]
+        raise RuntimeError(
+            f"menu did not load (url={driver.current_url}, title={driver.title}, body={page_text!r})"
+        ) from error
     return wait
 
 
@@ -159,6 +166,11 @@ def main():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--lang=ko-KR")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    )
 
     with webdriver.Chrome(options=options) as driver:
         driver.get(PORTAL_URL)
